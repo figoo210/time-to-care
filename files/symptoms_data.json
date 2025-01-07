@@ -1,0 +1,42 @@
+[
+    {
+        "Symptom": "Chest Pain",
+        "Specialization": "Cardiology"
+    },
+    {
+        "Symptom": "Headache",
+        "Specialization": "Neurology"
+    },
+    {
+        "Symptom": "Fever",
+        "Specialization": "General Emergency"
+    },
+    {
+        "Symptom": "Shortness of Breath",
+        "Specialization": "Cardiology"
+    },
+    {
+        "Symptom": "Dizziness",
+        "Specialization": "Neurology"
+    },
+    {
+        "Symptom": "Fainting",
+        "Specialization": "Neurology"
+    },
+    {
+        "Symptom": "Cough",
+        "Specialization": "General Emergency"
+    },
+    {
+        "Symptom": "Abdominal Pain",
+        "Specialization": "General Emergency"
+    },
+    {
+        "Symptom": "Allergic Reaction",
+        "Specialization": "General Emergency"
+    },
+    {
+        "Symptom": "Back Pain",
+        "Specialization": "Orthopedics"
+    }
+]

@@ -1,0 +1,92 @@
+[
+    {
+        "Name": "Alice Brown",
+        "Latitude": 45.470999,
+        "Longitude": 9.184322,
+        "Symptoms": [
+            "Shortness of Breath"
+        ]
+    },
+    {
+        "Name": "Bob Smith",
+        "Latitude": 45.4682,
+        "Longitude": 9.192785,
+        "Symptoms": [
+            "Allergic Reaction",
+            "Abdominal Pain",
+            "Chest Pain"
+        ]
+    },
+    {
+        "Name": "Charlie Davis",
+        "Latitude": 45.455666,
+        "Longitude": 9.195401,
+        "Symptoms": [
+            "Allergic Reaction",
+            "Abdominal Pain",
+            "Cough"
+        ]
+    },
+    {
+        "Name": "Dana Evans",
+        "Latitude": 45.460295,
+        "Longitude": 9.185011,
+        "Symptoms": [
+            "Headache"
+        ]
+    },
+    {
+        "Name": "Evan Gray",
+        "Latitude": 45.466964,
+        "Longitude": 9.18516,
+        "Symptoms": [
+            "Chest Pain"
+        ]
+    },
+    {
+        "Name": "Fiona Harris",
+        "Latitude": 45.465069,
+        "Longitude": 9.198881,
+        "Symptoms": [
+            "Allergic Reaction",
+            "Abdominal Pain",
+            "Headache"
+        ]
+    },
+    {
+        "Name": "George Johnson",
+        "Latitude": 45.457191,
+        "Longitude": 9.194443,
+        "Symptoms": [
+            "Fever",
+            "Fainting"
+        ]
+    },
+    {
+        "Name": "Hannah King",
+        "Latitude": 45.456891,
+        "Longitude": 9.194838,
+        "Symptoms": [
+            "Dizziness",
+            "Allergic Reaction"
+        ]
+    },
+    {
+        "Name": "Ian Lewis",
+        "Latitude": 45.471249,
+        "Longitude": 9.194458,
+        "Symptoms": [
+            "Abdominal Pain",
+            "Allergic Reaction",
+            "Fainting"
+        ]
+    },
+    {
+        "Name": "Julia Miller",
+        "Latitude": 45.471511,
+        "Longitude": 9.193265,
+        "Symptoms": [
+            "Fever"
+        ]
+    }
+]

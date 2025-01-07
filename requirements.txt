@@ -1,0 +1,11 @@
+pymongo[srv]
+neo4j
+streamlit
+pandas
+numpy
+folium
+matplotlib
+streamlit-folium
+plotly
+tabulate
+scipy
