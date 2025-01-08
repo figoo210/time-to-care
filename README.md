@@ -25,6 +25,23 @@ and reliable recommendations.
 4. Set up environment variables:
    - Create a `.env` file in the respective directories (frontend/backend).
    - Add required configuration values (API keys, database URLs, etc.).
+   - Data Mapping:
+   ```bash
+   # Add historical data to SQLite
+   python mapping_historical_data.py
+
+   # Add hospitals to Neo4J
+   python mapping_hospitals.py
+
+   # Add patients to MongoDB
+   python mapping_patient_data.py
+
+   # Add symptoms to Neo4J
+   python mapping_symptoms.py
+
+   # Add symptoms to SQLite
+   mapping_symptoms_sqlite.py
+   ```
 
 5. Run the application:
    ```bash
