@@ -13,6 +13,10 @@ def main():
 
     # Sidebar Actions
     st.sidebar.title("Actions")
+
+    if st.sidebar.button("Refresh Data"):
+        st.cache_data.clear()  # Clear the cache data
+
     success = manage_patient_form_internal(data["symptoms"])
     if success:
         st.cache_data.clear()
@@ -49,7 +53,9 @@ def main():
     display_patients_on_waiting_list(data["patients"], data["symptoms"], filters)
 
     # Recommended Hospitals
-    display_map(data["hospitals"], data["patients"], data["symptoms"])
+    manage_hospital_recommendation(
+        data["patients"], data["hospitals"], data["symptoms"]
+    )
 
 
 if __name__ == "__main__":

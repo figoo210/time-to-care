@@ -48,9 +48,9 @@ class Neo4jConnection:
         """
         query = """
             CREATE (p:Patient {
-                name: $name,
-                latitude: $latitude,
-                longitude: $longitude,
+                name: $Name,
+                latitude: $Latitude,
+                longitude: $Longitude,
                 triageCode: $triageCode
             })
         """
@@ -58,18 +58,17 @@ class Neo4jConnection:
 
     def add_symptom_relationships(self, patient_name, symptoms):
         """
-        Creates relationships between a patient and their symptoms.
+        Creates relationships between a patient and their existing symptoms.
 
         Args:
             patient_name (str): Name of the patient.
             symptoms (list): List of patient's symptoms.
         """
         query = """
-        MATCH (p:Patient {name: $patient_name})
-        UNWIND $symptoms AS symptom
-        CREATE (s:Symptom {name: symptom})
-        WITH p, s
-        CREATE (p)-[r:HAS_SYMPTOM]->(s)
+            MATCH (p:Patient {name: $patient_name}), (s:Symptom)
+            WHERE s.name IN $symptoms
+            WITH p, s
+            CREATE (p)-[r:HAS_SYMPTOM]->(s)
         """
         self.query(query, {"patient_name": patient_name, "symptoms": symptoms})
 
@@ -88,34 +87,3 @@ class Neo4jConnection:
         """
         results = self.query(query)
         return [{"hospital": row[0], "patient_count": row[1]} for row in results]
-
-    def calculate_average_travel_distance(self):
-        """
-        Calculates the average travel distance between patients and assigned hospitals.
-
-        Returns:
-            float: The average travel distance in kilometers.
-        """
-        query = """
-        MATCH (p:Patient)-[:TREATED_AT]->(h:Hospital)
-        RETURN distance(point({latitude: p.latitude, longitude: p.longitude}), point({latitude: h.latitude, longitude: h.longitude})) AS distance_km
-        """
-        results = self.query(query)
-        distances = [row[0] for row in results]
-        return sum(distances) / len(distances) if distances else 0
-
-    def identify_bottlenecks_by_symptoms(self):
-        """
-        Identifies symptoms that frequently lead to long wait times or high patient volumes.
-
-        Returns:
-            list: A list of dictionaries containing symptom names and associated metrics.
-        """
-        query = """
-        MATCH (p:Patient)-[:HAS_SYMPTOM]->(s:Symptom)
-        WITH s, count(p) AS patient_count
-        ORDER BY patient_count DESC
-        RETURN s.name AS symptom, patient_count
-        """
-        results = self.query(query)
-        return [{"symptom": row[0], "patient_count": row[1]} for row in results]

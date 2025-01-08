@@ -1,9 +1,12 @@
 import pandas as pd
 import numpy as np
+import random
+import time
 from datetime import datetime, tzinfo, timezone, timedelta
 from math import radians, sin, cos, sqrt, atan2
 from bson import ObjectId
 from collections import defaultdict
+import streamlit as st
 from db_sqlite import get_connection, fetch_data
 from db_neo4j import Neo4jConnection
 from db_mongodb import client
@@ -29,32 +32,23 @@ def add_hospital_queue_data(data):
 
 # Optional Function to simulate real-time data collection
 def simulate_real_time_data():
-    # Simulate real-time data collection by generating random data
-    # This function can be used to simulate the real-time data collection process
-    # and add the generated data to the MongoDB database
-    # For example, you can use the following code to generate random data
-    # and add it to the MongoDB database:
-    import random
-    import time
-    from datetime import datetime
-
-    # Generate random data
-    data = {
-        "hospital_id": random.choice(
-            ["Hospital A", "Hospital B", "Hospital C", "Hospital D", "Hospital E"]
-        ),
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "wait_time": random.randint(1, 120),
-        "triage_code": random.choice(["Green", "Yellow", "Red"]),
-    }
-    # Add the generated data to the MongoDB database
-    add_hospital_queue_data(data)
-    # Print a message to indicate that the data has been added
-    print("Simulated real-time data added to MongoDB database.")
-    # Sleep for a few seconds to simulate real-time data collection
-    time.sleep(60)  # Sleep for 60 seconds (1 minute)
-    simulate_real_time_data()  # Recursively call the function to continue data collection
-    return data
+    if st.session_state.get("simulate_data", False):  # Check if simulation is active
+        # Generate random data
+        data = {
+            "hospital_id": random.choice(
+                ["Hospital A", "Hospital B", "Hospital C", "Hospital D", "Hospital E"]
+            ),
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "wait_time": random.randint(1, 120),
+            "triage_code": random.choice(["Green", "Yellow", "Red"]),
+        }
+        # Add the generated data to the MongoDB database
+        add_hospital_queue_data(data)
+        # Print a message to indicate that the data has been added
+        print("Simulated real-time data added to MongoDB database.")
+        # Sleep for a few seconds to simulate real-time data collection
+        time.sleep(60)  # Sleep for 60 seconds (1 minute)
+        simulate_real_time_data()  # Recursively call the function to continue data collection
 
 
 ####################################################################################################
@@ -443,6 +437,7 @@ def get_current_queue_size(hospital_name):
                 }
             },
             {"$match": {"end_time": {"$gte": datetime.now(tz=timezone.utc)}}},
+            {"$match": {"hospital_id": hospital_name}},
             {"$count": "active_hospital_queues"},
         ]
     )
@@ -512,16 +507,13 @@ def recommend_hospitals_for_group_optimized(
     # Step 1: Group patients by specialization
     specialization_to_patients = defaultdict(list)
     for patient in patients:
-        patient_symptoms = patient["Symptoms"]
-        relevant_specializations = set(
-            symptom_to_specialization[symptom]
-            for symptom in patient_symptoms
-            if symptom in symptom_to_specialization
-        )
-        for specialization in relevant_specializations:
-            specialization_to_patients[specialization].append(patient)
+        for symptom in patient["Symptoms"]:
+            if symptom in symptom_to_specialization:
+                specialization = symptom_to_specialization[symptom]
+                specialization_to_patients[specialization].append(patient)
+                break  # Assign to the first matching specialization
 
-    # Step 2: Assign hospitals for each specialization using optimization
+    # Step 2: Assign patients to hospitals
     assignments = []
     for specialization, patient_group in specialization_to_patients.items():
         # Filter hospitals by specialization
@@ -532,51 +524,54 @@ def recommend_hospitals_for_group_optimized(
         ]
 
         if not candidate_hospitals:
-            continue  # Skip if no hospitals available for this specialization
+            continue  # Skip if no hospitals match this specialization
 
-        # Step 3: Build the cost matrix
-        num_patients = len(patient_group)
-        num_hospitals = len(candidate_hospitals)
-
-        cost_matrix = np.zeros((num_patients, num_hospitals))
+        # Step 3: Create cost matrix (patients x hospitals)
+        cost_matrix = np.zeros((len(patient_group), len(candidate_hospitals)))
 
         for i, patient in enumerate(patient_group):
-            patient_lat, patient_lon = patient["Latitude"], patient["Longitude"]
             for j, hospital in enumerate(candidate_hospitals):
+                # Calculate distance between patient and hospital
                 distance = haversine(
-                    float(patient_lat),
-                    float(patient_lon),
+                    float(patient["Latitude"]),
+                    float(patient["Longitude"]),
                     float(hospital["latitude"]),
                     float(hospital["longitude"]),
                 )
+                # Get hospital's average wait time and queue size
                 avg_wait_time = get_wait_time_average_last_week(
-                    hospital["name"], patient["TriageCode"]
+                    hospital["name"], "Green"
                 )
-                current_queue_size = get_current_queue_size(hospital["name"])
-                queue_factor = current_queue_size * 2  # Weight for queue size
-                cost_matrix[i, j] = distance + avg_wait_time / 10 + queue_factor
+                queue_size = get_current_queue_size(hospital["name"])
 
-        # Step 4: Solve the assignment problem
+                # Compute cost: weighted distance + wait time + queue size
+                cost_matrix[i, j] = 1.5 * distance + avg_wait_time / 10 + 2 * queue_size
+
+        # Step 4: Solve assignment problem
         row_ind, col_ind = linear_sum_assignment(cost_matrix)
 
         # Step 5: Record assignments
-        used_hospital_count = defaultdict(int)
         for patient_idx, hospital_idx in zip(row_ind, col_ind):
-            if hospital_idx < len(candidate_hospitals):
-                hospital = candidate_hospitals[hospital_idx]
-                current_queue_size = get_current_queue_size(hospital["name"])
-                used_hospital_count[hospital["name"]] += 1
-                assignments.append(
-                    {
-                        "patient": patient_group[patient_idx]["Name"],
-                        "hospital": hospital["name"],
-                        "distance": cost_matrix[patient_idx, hospital_idx]
-                        - (avg_wait_time / 10),
-                        "wait_time": avg_wait_time,
-                        "queue_size": current_queue_size,
-                        "score": cost_matrix[patient_idx, hospital_idx],
-                    }
-                )
+            patient = patient_group[patient_idx]
+            hospital = candidate_hospitals[hospital_idx]
+            assignments.append(
+                {
+                    "patient": patient["Name"],
+                    "hospital": hospital["name"],
+                    "distance": haversine(
+                        float(patient["Latitude"]),
+                        float(patient["Longitude"]),
+                        float(hospital["latitude"]),
+                        float(hospital["longitude"]),
+                    ),
+                    "wait_time": get_wait_time_average_last_week(
+                        hospital["name"], "Green"
+                    ),
+                    "queue_size": get_current_queue_size(hospital["name"]),
+                    "specialization": specialization,
+                    "triage_code": "Green",
+                }
+            )
 
     # Return the final assignments
     return pd.DataFrame(assignments)

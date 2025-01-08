@@ -415,159 +415,217 @@ def simulate_hospitals_realtime_data():
     Checkbox to simulate real-time data from hospitals.
     """
     if st.sidebar.checkbox("Simulate Real-Time Data", value=False):
+        # Start simulating data
+        st.session_state["simulate_data"] = True
         st.sidebar.info(
             "Simulating real-time data from hospitals. This will update the data every minute."
         )
         simulate_real_time_data()
+    else:
+        # Stop simulating data
+        st.session_state["simulate_data"] = False
+        # st.sidebar.info("Real-time data simulation stopped.")
 
 
-def recommend_hospital_for_patient(patients, symptom_to_specialization, hospitals):
-    """
-    Form for recommending a hospital based on patient symptoms and triage code.
-    """
-    st.header("Recommend a Hospital for a Patient")
-    with st.form("Recommend a Hospital Form", clear_on_submit=True):
-        # Select a patient
+# Hospital Recommendation
+
+
+def recommend_hospital_form(patients, symptom_to_specialization, hospitals):
+    """Displays a form to recommend a hospital for a selected patient."""
+    st.header("Recommend a Hospital")
+    group_recommendation = st.checkbox("Recommend for a Group of Patients")
+    with st.form("recommend_hospital_form", clear_on_submit=True):
         patient_names = [p["Name"] for p in patients]
-        patient_name = st.selectbox("Select Patient", options=patient_names, index=None)
-        triage_code = st.selectbox(
-            "Select Triage Code", options=["Green", "Yellow", "Red"], index=None
-        )
-
-        # Submit button
-        submitted = st.form_submit_button("Submit")
-        if submitted:
-            selected_patient = next(p for p in patients if p["Name"] == patient_name)
-            recommended_hospital = recommend_hospital(
-                selected_patient, hospitals, symptom_to_specialization, triage_code
+        if group_recommendation:
+            patients_name = st.multiselect("Select Patients", options=patient_names)
+        else:
+            patient_name = st.selectbox("Select Patient", options=patient_names)
+            triage_code = st.selectbox(
+                "Triage Code", options=["Green", "Yellow", "Red"]
             )
-            st.session_state["selected_patient"] = selected_patient
-            st.session_state["recommended_hospital"] = recommended_hospital
-            return selected_patient, recommended_hospital
+
+        if st.form_submit_button("Submit"):
+            if group_recommendation:
+                selected_patients = []
+                for patient in patients:
+                    if patient["Name"] in patients_name:
+                        selected_patients.append(patient)
+                recommended_hospitals = recommend_hospitals_for_group_optimized(
+                    selected_patients, hospitals, symptom_to_specialization
+                )
+                st.session_state.update(
+                    selected_patients=selected_patients,
+                    recommended_hospitals=recommended_hospitals,
+                )
+                if not recommended_hospitals.empty:
+                    for patient in selected_patients:
+                        process_hospital_recommendation(
+                            patient,
+                            recommended_hospitals.loc[
+                                recommended_hospitals["patient"] == patient["Name"]
+                            ],
+                        )
+
+            else:
+                selected_patient = next(
+                    p for p in patients if p["Name"] == patient_name
+                )
+                recommended_hospital = recommend_hospital(
+                    selected_patient,
+                    hospitals,
+                    symptom_to_specialization,
+                    triage_code,
+                )
+                st.session_state.update(
+                    selected_patient=selected_patient,
+                    recommended_hospital=recommended_hospital,
+                )
+                if not recommended_hospital.empty:
+                    process_hospital_recommendation(
+                        selected_patient, recommended_hospital
+                    )
     return None, None
 
 
-def display_hospital_recommendation(patient, recommended_hospital):
-    """
-    Display the hospital recommendation for a selected patient.
-    """
-    st.header("Hospital Recommendation")
-    st.write("Patient Symptoms:", patient["Symptoms"])
+def process_hospital_recommendation(patient, recommended_hospital):
+    """Automatically processes the hospital recommendation for the patient."""
+    hospital_info = recommended_hospital.iloc[0]
+    st.session_state.update(
+        recommendation_accepted=True, selected_hospital_name=hospital_info["hospital"]
+    )
 
-    # If a recommendation is found, display the details
-    if not recommended_hospital.empty:
-        hospital_info = recommended_hospital.iloc[0]
-        hospital_name = hospital_info["hospital"]
-        hospital_data = [
-            ["Hospital Name", hospital_name],
-            ["Score", round(hospital_info["score"], 2)],
-            ["Distance (km)", round(hospital_info["distance"], 2)],
-            ["Waiting Time (Minutes)", round(hospital_info["wait_time"], 2)],
-        ]
-        # Display hospital information as a table
-        st.code(
-            tabulate(hospital_data, headers=["Attribute", "Value"], tablefmt="grid")
-        )
+    # Simulate database updates (replace with actual functions)
+    add_hospital_queue_data(
+        {
+            "hospital_id": hospital_info["hospital"],
+            "triage_code": hospital_info["triage_code"],
+            "wait_time": round(hospital_info["wait_time"], 2),
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+    )
+    remove_patient_from_db(patient["_id"])
 
-        accepted = st.button("Accept Recommendation and See the Map")
-        if accepted:
-            st.session_state["recommendation_accepted"] = True
-            st.session_state["selected_hospital_name"] = hospital_name
-            st.success(f"Recommendation accepted for {hospital_name}!")
-            # Save the hospital queue data and remove patient from database (replace with actual functions)
-            add_hospital_queue_data(
-                {
-                    "hospital_id": hospital_name,
-                    "triage_code": hospital_info["triage_code"],
-                    "wait_time": round(hospital_info["wait_time"], 2),
-                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "date": datetime.now().strftime("%Y-%m-%d"),
-                }
-            )
-            remove_patient_from_db(patient["_id"])
-            # Connect to Neo4J to add the patient
-            neo4j = Neo4jConnection()
-            patient["triageCode"] = hospital_info["triage_code"]
-            neo4j.create_patient_node(patient_data=patient)
-            neo4j.add_symptom_relationships(
-                patient_name=patient["Name"], symptoms=patient["Symptoms"]
-            )
+    # Neo4j integration
+    neo4j = Neo4jConnection()  # Replace with your actual Neo4j connection instance
+    patient["triageCode"] = hospital_info["triage_code"]
 
-    else:
-        st.warning("No hospital recommendation available.")
+    # Create patient node and relationships in Neo4j
+    neo4j.create_patient_node(patient_data=patient)
+    neo4j.add_symptom_relationships(
+        patient_name=patient["Name"], symptoms=patient["Symptoms"]
+    )
 
 
-def display_map(hospitals, patients, symptom_to_specialization):
-    """
-    Display map with patient and hospital information.
-    """
-    # Ensure session state variables exist
-    if "selected_patient" not in st.session_state:
-        st.session_state["selected_patient"] = None
-    if "recommended_hospital" not in st.session_state:
-        st.session_state["recommended_hospital"] = pd.DataFrame()
-    if "recommendation_accepted" not in st.session_state:
-        st.session_state["recommendation_accepted"] = False
-    if "selected_hospital_name" not in st.session_state:
-        st.session_state["selected_hospital_name"] = None
-
-    # Recommend hospital
-    if not st.session_state["recommendation_accepted"]:
-        recommend_hospital_for_patient(patients, symptom_to_specialization, hospitals)
-
-    selected_patient = st.session_state["selected_patient"]
-    recommended_hospital = st.session_state["recommended_hospital"]
-
-    # Display recommendation
-    if selected_patient and not st.session_state["recommendation_accepted"]:
-        display_hospital_recommendation(selected_patient, recommended_hospital)
-
-    # Create the map
-    starting_location = (45.470999, 9.184322)
-    m = folium.Map(location=starting_location, zoom_start=13, key="patient_map")
+def render_map(hospitals, patients):
+    """Displays a map showing hospital and patient locations."""
+    m = folium.Map(location=(45.470999, 9.184322), zoom_start=13)
 
     # Add hospital markers
-    for row in hospitals:
+    for h in hospitals:
         folium.Marker(
-            location=(row["latitude"], row["longitude"]),
-            popup=f"{row['name']} ({row['specialization']})",
+            location=(h["latitude"], h["longitude"]),
+            popup=f"{h['name']} ({h['specialization']})",
             icon=folium.Icon(color="red"),
         ).add_to(m)
 
-    # Add patient marker and line if recommendation is accepted
-    if st.session_state["recommendation_accepted"] and selected_patient:
-        folium.Marker(
-            location=(
-                float(selected_patient["Latitude"]),
-                float(selected_patient["Longitude"]),
-            ),
-            popup=f"Patient: {selected_patient['Name']} ({selected_patient['Symptoms']})",
-            icon=folium.Icon(color="green"),
-        ).add_to(m)
+    # Add patient(s) marker and line if a recommendation is accepted
+    if st.session_state.get("recommendation_accepted"):
+        if len(patients) > 0:
+            st.dataframe(st.session_state["recommended_hospitals"])
+            for patient in patients:
+                # Add patient marker
+                folium.Marker(
+                    location=(patient["Latitude"], patient["Longitude"]),
+                    popup=f"Patient: {patient['Name']}",
+                    icon=folium.Icon(color="green"),
+                ).add_to(m)
 
-        # Add a line to the recommended hospital
-        if not recommended_hospital.empty:
-            hospital_name = recommended_hospital.iloc[0]["hospital"]
-            hospital_info = next(
-                (h for h in hospitals if h["name"] == hospital_name), None
+                # Add line from patient to recommended hospital
+                recommended_hospitals = st.session_state["recommended_hospitals"]
+                hospital_name = recommended_hospitals.loc[
+                    recommended_hospitals["patient"] == patient["Name"],
+                    "hospital",
+                ].values[0]
+                hospital = next(h for h in hospitals if h["name"] == hospital_name)
+
+                # Add line to recommended hospital
+                folium.PolyLine(
+                    [
+                        (patient["Latitude"], patient["Longitude"]),
+                        (hospital["latitude"], hospital["longitude"]),
+                    ],
+                    color="blue",
+                    weight=3,
+                ).add_to(m)
+        else:
+            patient = st.session_state["selected_patient"]
+            recommended_hospital = st.session_state["recommended_hospital"].iloc[0]
+            st.header("Hospital Recommendation")
+            st.write("Patient Name:", patient["Name"])
+            st.write("Patient Symptoms:", patient["Symptoms"])
+            hospital_name = recommended_hospital["hospital"]
+            hospital_data = [
+                ["Hospital Name", hospital_name],
+                ["Score", round(recommended_hospital["score"], 2)],
+                ["Distance (km)", round(recommended_hospital["distance"], 2)],
+                ["Waiting Time (Minutes)", round(recommended_hospital["wait_time"], 2)],
+            ]
+            # Display hospital information as a table
+            st.code(
+                tabulate(hospital_data, headers=["Attribute", "Value"], tablefmt="grid")
             )
-            st.write("Recommended Hospital assigned successfully!")
-            if st.button("Another Recommendation"):
-                st.session_state["recommendation_accepted"] = False
-                st.session_state["selected_hospital_name"] = None
-                st.cache_data.clear()
+            hospital = next(
+                h for h in hospitals if h["name"] == recommended_hospital["hospital"]
+            )
+
+            # Add patient marker
+            folium.Marker(
+                location=(patient["Latitude"], patient["Longitude"]),
+                popup=f"Patient: {patient['Name']}",
+                icon=folium.Icon(color="green"),
+            ).add_to(m)
+
+            # Add line to recommended hospital
             folium.PolyLine(
-                locations=[
-                    (
-                        float(selected_patient["Latitude"]),
-                        float(selected_patient["Longitude"]),
-                    ),
-                    (hospital_info["latitude"], hospital_info["longitude"]),
+                [
+                    (patient["Latitude"], patient["Longitude"]),
+                    (hospital["latitude"], hospital["longitude"]),
                 ],
                 color="blue",
                 weight=3,
-                opacity=0.6,
             ).add_to(m)
 
-    # Display the map
     st_folium(m, width="100%", height=500)
+
+
+def manage_hospital_recommendation(patients, hospitals, symptom_to_specialization):
+    """Main function to manage hospital recommendations."""
+    if "recommendation_accepted" not in st.session_state:
+        st.session_state["recommendation_accepted"] = False
+
+    if not st.session_state["recommendation_accepted"]:
+        recommend_hospital_form(patients, symptom_to_specialization, hospitals)
+
+    if (
+        st.session_state.get("selected_patient")
+        and st.session_state.get("recommended_hospital").empty is False
+    ):
+        render_map(hospitals, [])
+        if st.button("New Recommendation"):
+            st.session_state["recommendation_accepted"] = False
+            st.session_state["selected_patient"] = None
+            st.session_state["recommended_hospital"] = None
+            st.session_state["selected_hospital_name"] = None
+            st.cache_data.clear()
+
+    if (
+        st.session_state.get("selected_patients")
+        and st.session_state.get("recommended_hospitals").empty is False
+    ):
+        render_map(hospitals, st.session_state.get("selected_patients"))
+        if st.button("New Recommendation"):
+            st.session_state["recommendation_accepted"] = False
+            st.session_state["selected_patients"] = None
+            st.session_state["recommended_hospitals"] = None
+            st.session_state["selected_hospital_name"] = None
+            st.cache_data.clear()
