@@ -1,4 +1,8 @@
 import sqlite3
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 def create_connection(db_file):
@@ -46,7 +50,7 @@ def setup_database(conn):
 
 # function to use the database across the project with full setup
 def get_connection():
-    database = "time_to_care.db"
+    database = os.getenv("SQLITE_DB")
     conn = create_connection(database)
     setup_database(conn)
     return conn
