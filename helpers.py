@@ -10,6 +10,7 @@ import streamlit as st
 from db_sqlite import get_connection, fetch_data
 from db_neo4j import Neo4jConnection
 from db_mongodb import client
+from mapping_hospitals_to_dict import get_hospitals
 from scipy.optimize import linear_sum_assignment
 
 
@@ -266,13 +267,17 @@ def load_hospitals():
     # Establish a connection to the Neo4j database
     neo4j_conn = Neo4jConnection()
 
-    # Query Neo4j for hospital data
-    hospitals = neo4j_conn.query(
-        "MATCH (h:Hospital) RETURN h.name AS name, h.latitude AS latitude, h.longitude AS longitude, h.specialization AS specialization"
-    )
+    if neo4j_conn.is_connected:
+        # Query Neo4j for hospital data
+        hospitals = neo4j_conn.query(
+            "MATCH (h:Hospital) RETURN h.name AS name, h.latitude AS latitude, h.longitude AS longitude, h.specialization AS specialization"
+        )
+        # Close the connection to the Neo4j database
+        neo4j_conn.close()
+    else:
 
-    # Close the connection to the Neo4j database
-    neo4j_conn.close()
+        hospitals = get_hospitals()
+        print("########################### Using local hospital data.")
 
     # Process the results into a list of dictionaries
     results = []

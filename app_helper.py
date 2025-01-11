@@ -18,7 +18,7 @@ def load_data():
     """
     hospitals = load_hospitals()  # Load hospital data
     symptoms = (
-        load_symptom_to_specialization()
+        load_symptom_to_specialization_table()
     )  # Load symptom-to-specialization mapping
     patients = load_patient_data()  # Load patient data
     wait_times = get_hospital_wait_times()  # Load hospital wait times data

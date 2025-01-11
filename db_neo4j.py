@@ -1,4 +1,5 @@
 from neo4j import GraphDatabase
+from neo4j.exceptions import ServiceUnavailable
 import os
 from dotenv import load_dotenv
 
@@ -12,7 +13,21 @@ class Neo4jConnection:
         user=os.getenv("NEO4J_USER"),
         password=os.getenv("NEO4J_PASSWORD"),
     ):
-        self._driver = GraphDatabase.driver(uri, auth=(user, password))
+        try:
+            # Attempt to create the driver
+            self._driver = GraphDatabase.driver(uri, auth=(user, password))
+            # Explicitly test the connection
+            with self._driver.session() as session:
+                session.run("RETURN 1")  # Run a simple test query
+            self.is_connected = True
+            print("Connected successfully to Neo4j.")
+        except ServiceUnavailable as e:
+            print("############### Failed to create the driver:", e)
+            self.is_connected = False
+        except Exception as e:
+            # Catch any other unexpected errors
+            print(f"############### An unexpected error occurred: {e}")
+            self.is_connected = False
 
     def close(self):
         self._driver.close()
